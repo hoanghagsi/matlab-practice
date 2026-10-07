@@ -1,0 +1,207 @@
+Agent C — round 2 verification of drm2d_nonlocality_tool.m against PLAN2.md
+Date: 2026-10-01.  File under test: 3097 lines, 114 locals.
+Harnesses: agentC2_gaps.m, agentC2_fix.m (this directory).  Nothing was fixed.
+
+================================================================================
+VERDICT
+================================================================================
+The five-button workflow works as specified.  T55 (no regression) confirmed
+independently: 59 passed, 0 failed, exit 0.
+
+TWO DEFECTS found, both new this round, neither present in round 1:
+  D1 (HIGH)   a stale exact_Gy is silently reused after a geometry change,
+              producing a visibly wrong info-box number (52.000 % observed).
+  D2 (MEDIUM) the info box's "pin ripple rms" measures the wrong array.
+
+Plus: 1 planned test absent (T40) and 6 weaker than PLAN2 specifies.
+
+================================================================================
+D1  STALE exact_Gy SILENTLY REUSED  (HIGH)
+================================================================================
+exact_Gy is the only dose with NO parameter stamp and NO clearing path:
+  - written ONLY at line 1739, and only when chk_exact is ticked;
+  - clearDerived() (line 1753) does NOT clear it;
+  - onReset() does NOT clear it (Agent B's deviation 2);
+  - there is no PusedExact, so sameGeom() cannot guard it;
+  - it is CONSUMED at line 2288 (modelVsExactPct -> info box) and at
+    lines 2673/2674 (figMapsYZ "actual" and "residual" panels).
+
+Reproducer (agentC2_gaps.m, section G4):
+  f = drm2d_nonlocality_tool('new','Visible','off');
+  set(guidata(f).h.chk_exact,'Value',1);
+  drm2d_nonlocality_tool('calcrashi',f); drm2d_nonlocality_tool('calc2drm',f);
+  set(guidata(f).h.chk_exact,'Value',0);              % untick
+  drm2d_nonlocality_tool('set',f,'heightB_mm',20);    % change geometry
+  drm2d_nonlocality_tool('calcrashi',f); drm2d_nonlocality_tool('calc2drm',f);
+  drm2d_nonlocality_tool('applynl',f);
+
+Observed:
+  exact_Gy is still the OLD (heightB = 40) array           : 1
+  info box "model vs exact"                                : 52.000 %
+  exact_Gy survives Reset                                  : 1
+True value for this geometry is ~2.5 %.  The 52 % is the old exact dose
+differenced against the new after dose.  Nothing on screen says it is stale,
+and fig3_maps would draw its "actual" and "residual" panels from the same array.
+
+Note this is the ONE hole in the otherwise-good mixed-geometry guard: the guard
+covers rashi_Gy and local_Gy correctly (see G3 below) but not exact_Gy.
+
+Proposed fix (NOT applied):
+  add S.dose.PusedExact, stamped where exact_Gy is written (line 1739); have
+  modelVsExactPct() and figMapsYZ() require sameGeom(PusedExact, PusedLocal) and
+  otherwise treat exact_Gy as absent; clear exact_Gy in clearDerived().
+
+================================================================================
+D2  "PIN RIPPLE RMS" MEASURES THE WRONG ARRAY  (MEDIUM)
+================================================================================
+pinRippleRms() (line 2256) is evaluated on S.dose.diff_pct, i.e. on
+(local + nl - rashi).  That quantity contains almost no pin ripple by
+construction:
+  - local and rashi share an IDENTICAL fluence (identity P1), so their
+    difference is the smooth material term;
+  - nl is the cell-averaged model, piecewise constant per 3 mm cell.
+The genuine pin ripple - the intra-cell level/position correlation - lives in
+the EXACT 2DRM difference, the only array built from position-labelled fluence.
+
+Measured (agentC2_fix.m F1, default geometry, both grids):
+
+  grid            displayed(diff_pct)   exact-RaShi   local-RaShi
+  1.0 mm pixel         0.466 %            0.941 %       0.107 %
+  0.5 mm pixel         0.054 %            0.931 %       0.054 %
+
+This is the proof: the REAL ripple is grid-independent (0.941 -> 0.931 %), as a
+physical quantity must be, while the number the info box prints collapses by 9x
+when the grid is refined.  What pinRippleRms currently reports is therefore a
+DISCRETISATION ARTEFACT - the mismatch between cellsToPixels' piecewise-constant
+3 mm steps and blockMean3's block alignment - not the pin ripple.  Agent B's
+0.466 % is reproduced exactly, so the arithmetic is right; the input is wrong.
+
+Caveat: neither 0.941 % nor 0.931 % reproduces the ~1.35 % quoted elsewhere in
+the project.  Those earlier figures come from the Python model at its own
+settings and metric mask; I did not reconcile the remaining difference, so
+treat ~0.93 % as "what this tool measures on this geometry", not as a
+confirmation of the project number.
+
+Proposed fix (NOT applied):
+  evaluate pinRippleRms on (exact_Gy - rashi_Gy) when a CURRENT exact_Gy exists
+  (see D1), and print "-" otherwise rather than a number derived from diff_pct;
+  or relabel the field "ripple of the displayed difference".
+
+================================================================================
+TEST-SUITE GAPS vs PLAN2.md section 7
+================================================================================
+ABSENT:
+  T40  "difference-after vs exact 2DRM within the pin-ripple + level-0 bound"
+       has no check at all (Agent B declared this).
+
+WEAKER THAN SPECIFIED (verified by reading the assertions):
+  T38  PLAN2: "swap lp_M->lp_R in a scratch copy => difference becomes 0".
+       Actual: ~isequal(local,rashi) && max|diff| < 25.  A sanity bound, not
+       the specified swap.  (Not vacuous: an lp_R swap would make the arrays
+       equal and trip the ~isequal.)
+  T44  PLAN2 wants the guard; the check asserts only btn_diff Enable='off'.
+       btn_apply and the programmatic refusal are untested by the suite.
+       (Both DO work - see G3 - so this is weak coverage, not a bug.)
+  T51  PLAN2: "f_A, r_B, sigma, ratio match direct computation to 1e-10".
+       Actual: contains(joined,'f_A') && contains(joined,'r_B') &&
+       contains(joined,'sigma'), plus "fAx in (0,1)" computed directly and
+       never compared with what is displayed.  LABELS ONLY.
+  T52  PLAN2: "prints OK; AND FAIL when forced on a mutated spectrum".
+       Actual: contains(joined,'OK').  The second half is absent, and 'OK'
+       anywhere in the box satisfies it.
+  T53  PLAN2: "max RaShi/2DRM, peak |dD| and its (y,z) match the arrays".
+       Actual: contains(joined,'max RaShi') && contains(joined,'peak |dD|').
+       LABELS ONLY.
+  T54  PLAN2: "differ by >2x".  Actual: pz > gl only (Agent B declared this).
+       MEASURED (G6, Region B = 10 mm): global 30.400 %, per-zone 53.534 %,
+       ratio 1.761.  So PLAN2's ">2x" criterion is NOT met.  The per-zone
+       figure does differ, and in the expected direction, but by 1.76x.  Agent
+       B's weaker assertion passes and thereby hides that the plan's own
+       stated expectation does not hold for this configuration.
+
+================================================================================
+T40 - MEASUREMENT AND THE BOUND I SET
+================================================================================
+Measured (agentC2_fix.m F2, default geometry A=60/B=40, coarse 1 mm grid),
+max |(local + nl) - exact| / max(rashi):
+
+  planned field                  2.496 %   <- the overall maximum sits here
+  expansion rings (pins exist)   0.991 %   approximation A1, NOT level 0
+  beyond the pinned area         0.021 %   <- the level-0 edge term
+  over R > 50 % of max           2.496 %   (rms 0.829 %)
+
+Agent B's characterisation is VINDICATED: the level-0 term contributes
+essentially nothing to the peak (0.021 %).  An intermediate split I ran first
+(agentC2_gaps.m G2) reported 0.991 % "outside the field" and I initially read
+that as the level-0 term; it is not.  "Outside the planned field" still contains
+pins, because the pinned area extends 3 expansion rings (to +-24 mm) beyond the
++-15 mm field.  Level 0 exists only BEYOND the pins.  F2 corrects G2.
+
+BOUND SET: 3.5 % for the default geometry at the coarse grid.
+Reasoning: 1.4x the measured 2.496 %.  The residual is dominated by the physical
+pin ripple (~0.93 % rms) plus the A1 breakdown near the field edge, neither of
+which the model claims to capture.  1.4x leaves room for grid and rounding
+variation while staying tight enough that a sign error or a wrong baseline
+(e.g. applying the model to rashi instead of local) would blow straight past it.
+Agent B's suggested 3.7 % is equally defensible; I chose slightly tighter.
+
+LIMIT: this bound was measured at ONE geometry and ONE grid.  At Region B =
+10 mm the difference map already spans -4.74..+30.40 %, and I did not measure
+the residual there.  The bound must be re-measured before it is applied to any
+other geometry.
+
+================================================================================
+AGENT B's THREE DEVIATIONS — VERDICTS
+================================================================================
+1. "Apply auto-computes the local dose if missing."              SAFE.
+   Verified (G3): the auto-computed local dose is stamped with the CURRENT
+   parameters, and bothDosesReady() then compares that stamp against the RaShi
+   dose's stamp and refuses.  Reproducer: calcrashi at K_B=40, set heightB=20,
+   applynl -> after_Gy stays empty, status says the parameters differ.
+   The guard is NOT bypassed.
+
+2. "Reset keeps exact_Gy."                        DEFENSIBLE, BUT EXPOSES D1.
+   PLAN2 section 1 does list exact_Gy in the clear-set, so this IS a deviation.
+   Agent B's reasoning (it is a calculated dose from button 2, and clearing it
+   would contradict the user's "Reset must not force a recompute" decision) is
+   sound in isolation.  The problem is not Reset: it is that exact_Gy has no
+   parameter stamp anywhere, so keeping it across a geometry change produces
+   D1.  Fix D1 and this deviation becomes harmless.
+
+3. "btn_result is never disabled."                               SOUND.
+   PLAN2 is genuinely self-contradictory here: section 1 says btn_result is
+   enabled when rashi_Gy exists, while section 5 / T46 require the two
+   parameter-only figures with NO dose at all.  Resolving in favour of T46 is
+   the right call - the mechanism and dPhi_k figures need parameters only, and
+   they are the two best figures for explaining the model.
+
+================================================================================
+WHAT PASSED (independently verified)
+================================================================================
+- G7: the info-box VALUES are correct, even though the tests do not check them:
+    max RaShi shown 0.11898 vs actual 0.11898   MATCH
+    max 2DRM  shown 0.12040 vs actual 0.12040   MATCH
+    peak |dD| shown 1.960   vs actual 1.957     MATCH (display rounds to 2 dp)
+  So T51/T53 are weak COVERAGE, not a defect in the implementation.
+- G5: fig3_maps panel count is correct - 2 axes with Compare-exact off, 4 with.
+  (Agent B declared this untested; it now is, and it passes.)
+- 59/59 base selftest, exit 0 (T55).
+- Mixed-geometry guard (G3): btn_diff off, btn_apply off, programmatic seediff
+  and applynl both refuse, and the auto-compute path refuses.  updateButtonStates
+  (line 1939) gates BOTH buttons on sameGeom; onResult (line 2394) uses it too.
+- The two declined DEFECTS.md fixes are genuinely absent and no partial or
+  side-effect fix was introduced: snapHeight still clamps to 0 (line 326),
+  snapWidth still clamps to D (line 308), validateParams threads no previous
+  value, and the vacuous single-x-slice check is intact at line 3088.
+  The only "previous value restored" path is the round-1 non-numeric handling
+  in onParamChanged (line 1570), which is T29 and predates this round.
+
+================================================================================
+CAVEAT ON TIMINGS
+================================================================================
+Agent B's per-button runtimes could NOT be independently confirmed.  Two foreign
+MATLAB processes (PIDs 4224 and 14740, started 14:19, before any of my runs)
+were consuming CPU throughout, and my own runs overlapped.  The same RaShi
+calculation measured 114.2 s, 43.8 s, 28.9 s, 23.1 s, 20.1 s and 10.9 s in
+different runs.  The low end is consistent with Agent B's 21.4 s; the figure is
+plausible but was not reproduced under controlled conditions.
