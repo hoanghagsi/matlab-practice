@@ -1,4 +1,3 @@
 def add(a, b):
+    """Cộng hai số."""
     return a + b
-
-print(add(2, 3))
