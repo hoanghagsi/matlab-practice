@@ -1,4 +1,33 @@
+# Kế hoạch nội bộ
 PLAN.md
 PLAN2.md
 PLAN3.md
+
+# Dữ liệu tham chiếu lớn
 reference/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+.pytest_cache/
+
+# MATLAB
+*.asv
+*.mex*
+slprj/
+
+# Hệ điều hành
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+
