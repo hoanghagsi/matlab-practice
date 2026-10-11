@@ -15,3 +15,6 @@ def power(a, b):
 def modulo(a,b):
     """Tính a chia lấy dư b."""
     return a % b
+
+def absolute(a):
+	return abs(a)
