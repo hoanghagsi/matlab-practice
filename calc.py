@@ -11,3 +11,7 @@ def divide(a,b):
 def power(a, b):
     """Tính a mũ b."""
     return a ** b
+
+def modulo(a,b):
+    """Tính a chia lấy dư b."""
+    return a % b
