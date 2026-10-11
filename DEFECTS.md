@@ -158,3 +158,5 @@ Add a test that asserts the value is **unchanged** after bad input, not merely p
 - Unrelated and also open: the three `analytic_model/nonlocality.py` defects from the earlier
   adversarial pass (see `CLAUDE.md` Current Status). The MATLAB tool already implements the
   **corrected** D2 spectral weight, so it is not affected by those.
+
+Checking with MATLAB codes
