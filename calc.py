@@ -7,6 +7,7 @@ def multiply(a,b):
     return a*b
 
 def divide(a,b):
+    "asdasdasas"
     return a/b
 
 def power(a, b):
