@@ -3,7 +3,7 @@ def add(a, b):
     return a + b
 
 def multiply(a,b):
-    "a *b "
+    "multiply of 2 numbers"
     return a*b
 
 def divide(a,b):
