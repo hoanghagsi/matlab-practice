@@ -1,5 +1,5 @@
 def add(a, b):
-    """ Tinh tong hai so nguyen"""
+    """Add two numbers and return the result"""
     return a + b
 
 def multiply(a,b):
