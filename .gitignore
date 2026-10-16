@@ -30,4 +30,5 @@ desktop.ini
 # Editor
 .vscode/
 *.swp
-
+*.kate-swp
+*~
