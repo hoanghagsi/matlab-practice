@@ -20,3 +20,7 @@ def modulo(a,b):
 
 def absolute(a):
 	return abs(a)
+
+
+def square(a):
+    return a ** 2
