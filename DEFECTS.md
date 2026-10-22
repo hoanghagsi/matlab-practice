@@ -161,3 +161,5 @@ Add a test that asserts the value is **unchanged** after bad input, not merely p
 
 Checking with MATLAB codes
 Practicing Branch merging
+
+2026.10.22 - Log for learning Rebase
