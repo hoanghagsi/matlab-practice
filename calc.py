@@ -8,6 +8,8 @@ def multiply(a,b):
 
 def divide(a,b):
     "asdasdasas"
+    if b == 0:
+        raise ValueError("Khong the chia cho 0")
     return a/b
 
 def power(a, b):
